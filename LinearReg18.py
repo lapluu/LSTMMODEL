@@ -217,12 +217,15 @@ def save_evaluation_to_csv(mse, msle, mae, r2):
     logging.info(f"Evaluation errors saved to {EVALUATION_ERROR_FILE}")
 
 def plot_predictions(df, train_size, Y_test, y_pred, y_future):
-    future_dates = pd.date_range(df["Date"][train_size + LOOK_BACK:].iloc[-1], periods=N_FUTURE + 1)[:-1]
+    # pick up the last date in the "Date" column as the start_day for futures
+    start_date = df["Date"][-1:].iloc[-1]
+    future_dates = pd.date_range(start_date, periods=N_FUTURE + 1)[:-1]
 
     plt.figure(figsize=(10, 6))
     plt.style.use('fivethirtyeight')
-    plt.plot(df["Date"][train_size + LOOK_BACK:], Y_test.flatten(), label="Actual", linewidth=3, alpha=0.4)
-    plt.plot(df["Date"][train_size + LOOK_BACK:], y_pred.flatten(), label="Predicted", linewidth=1.5, color='blue')
+    plot_len = len(Y_test.flatten()) # pick up enough 'Date" cells matched the len of Y_test array only.
+    plt.plot(df["Date"][-plot_len:], Y_test.flatten(), label="Actual", linewidth=3, alpha=0.4)
+    plt.plot(df["Date"][-plot_len:], y_pred.flatten(), label="Predicted", linewidth=1.5, color='blue')
     plt.plot(future_dates, y_future.flatten(), label="Future", linewidth=1.5, color='orange')
     plt.title("LSTM: Actual vs Predicted vs Future")
     plt.xlabel("Date")
@@ -231,8 +234,6 @@ def plot_predictions(df, train_size, Y_test, y_pred, y_future):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
-
-
 import datetime
 
 
