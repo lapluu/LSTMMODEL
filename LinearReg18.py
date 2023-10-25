@@ -12,24 +12,25 @@ from tensorflow.keras.callbacks import EarlyStopping
 # changes for this version 18 Sept 19,2023
 # Purpose: Try to put all the values into a structure so that
 #          it can be grouped into a centralized area for easy visual inspection.
+# Sept 23,2023. Version LinearReg19.py. Changes are:
+#   1.- Use validation_split = 0.2 in model.fit()
+#   2.- Rename to evaluate_model_errors() for naming clarity
 
-# model.compile(optimizer='adam',
-#               loss='sparse_categorical_crossentropy',
-#               metrics=['accuracy'])
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
 # Global variables
-DATA_RATIO = 0.8
+DATA_RATIO = 0.9
 #INPUT_DATA_FILE = 'AAPL_2013_2023_10_04.csv'
 #INPUT_DATA_FILE = 'BTC-CAD_2014_2023_10_06.csv'
 INPUT_DATA_FILE = 'AAPL_00_2023_10_12.csv'
 INPUT_DATA_PATH = "input/"
-LOOK_BACK = 60
+TIME_STEPS = 60
 N_FUTURE = 30
 USED_TRAINED_MODEL = False
 MODEL_FILE_BASE = "model_LSTM" + "AAPL-USD_"
-EVALUATION_ERROR_FILE = "output/results/evaluation_errors.csv"
+EVALUATION_ERROR_FILE = "evaluation_errors.csv"
 OUTPUT_RESULTS_PATH = "output/results/"
 OUTPUT_MODELS_PATH = "output/model/"
 
@@ -75,7 +76,7 @@ def load_trained_model(filename):
 def create_data(data,look_back):
     X, Y = [], []
     for i in range(look_back, len(data)):
-        X.append(data[i - look_back : i, 0])
+        X.append(data[i - look_back: i, 0])
         Y.append(data[i, 0])
     X, Y = np.array(X), np.array(Y)
     X = np.reshape(X, (X.shape[0], X.shape[1], 1))
@@ -134,8 +135,14 @@ def preprocess_data(df):
     return close_prices, close_prices_scaled, scaler
 
 
-def split_data(data, ratio):
-    train_size = int(len(data) * ratio)
+def split_data(data, ratio, timesteps):
+    remainder = len(data) % timesteps
+    if (remainder > 0):
+        data = data[remainder:]
+    data_units = len(data) / timesteps
+    train_units = int(data_units * ratio)
+    test_units = data_units - train_units
+    train_size = train_units * timesteps
     train_data = data[:train_size]
     test_data = data[train_size:]
     logging.info(f"Training data size: {train_size} / {len(data)}")
@@ -188,11 +195,12 @@ def build_model(input_shape):
 
 def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
+    # Used 20% of train data for validation
     history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=64, validation_data=(x_val_data, y_val_label),
-                        callbacks=[early_stop])
+                        validation_split=0.2, callbacks=[early_stop])
     return history
 
-def evaluate_model(Y_test, y_pred):
+def evaluate_model_errors(Y_test, y_pred):
     mse = mean_squared_error(Y_test[0], y_pred)
     msle = mean_squared_log_error(Y_test[0], y_pred)
     mae = mean_absolute_error(Y_test[0], y_pred)
@@ -213,13 +221,13 @@ def save_evaluation_to_csv(mse, msle, mae, r2):
         'Value': [mse, msle, mae, r2]
     })
     # Saving the DataFrame to a CSV file
-    evaluation_df.to_csv(EVALUATION_ERROR_FILE, index=False)
-    logging.info(f"Evaluation errors saved to {EVALUATION_ERROR_FILE}")
+    evaluation_df.to_csv(OUTPUT_RESULTS_PATH+EVALUATION_ERROR_FILE, index=False)
+    logging.info(f"Evaluation errors saved to {OUTPUT_RESULTS_PATH}{EVALUATION_ERROR_FILE}")
 
-def plot_predictions(df, train_size, Y_test, y_pred, y_future):
+def plot_predictions(df, Y_test, y_pred, y_future):
     # pick up the last date in the "Date" column as the start_day for futures
-    start_date = df["Date"][-1:].iloc[-1]
-    future_dates = pd.date_range(start_date, periods=N_FUTURE + 1)[:-1]
+    last_date = df["Date"][-1:].iloc[-1]
+    future_dates = pd.date_range(last_date, periods=N_FUTURE + 1)[:-1]
 
     plt.figure(figsize=(10, 6))
     plt.style.use('fivethirtyeight')
@@ -234,7 +242,6 @@ def plot_predictions(df, train_size, Y_test, y_pred, y_future):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
-import datetime
 
 
 def save_forecast_to_csv(close_prices_df, y_future, n_future):
@@ -257,34 +264,12 @@ def save_forecast_to_csv(close_prices_df, y_future, n_future):
     logging.info(f"Forecasted data saved to {file_name}")
 
 
-def directional_loss(y_true, y_pred, alpha=2.0):
-    """
-    y_true: True values
-    y_pred: Predicted values
-    alpha: Multiplier for the penalty when directions mismatch
-    """
-    # Calculate the difference between true values and predicted values
-    diff_true = y_true - tf.roll(y_true, shift=1, axis=0)
-    diff_pred = y_pred - tf.roll(y_pred, shift=1, axis=0)
-
-    # Calculate the directional mismatch
-    mismatch = tf.sign(diff_true) != tf.sign(diff_pred)
-
-    # Calculate the absolute error
-    error = tf.abs(diff_true - diff_pred)
-
-    # Apply the penalty for mismatches
-    loss = tf.where(mismatch, alpha * error, error)
-
-    return tf.reduce_mean(loss)
-
-
 def main():
     df = load_data(INPUT_DATA_PATH + INPUT_DATA_FILE)
     close_prices, close_prices_scaled, scaler = preprocess_data(df)
-    train_size, train_data, test_data = split_data(close_prices_scaled, DATA_RATIO)
-    X_train, Y_train = create_data(train_data, LOOK_BACK)
-    X_test, Y_test = create_data(test_data, LOOK_BACK)
+    train_size, train_data, test_data = split_data(close_prices_scaled, DATA_RATIO, TIME_STEPS)
+    X_train, Y_train = create_data(train_data, TIME_STEPS)
+    X_test, Y_test = create_data(test_data, TIME_STEPS)
 
     # Before training
     if USED_TRAINED_MODEL:
@@ -309,9 +294,9 @@ def main():
 
     y_test_rescaled = scaler.inverse_transform([Y_test])
 
-    evaluate_model(y_test_rescaled, y_pred_rescaled)
+    evaluate_model_errors(y_test_rescaled, y_pred_rescaled)
     save_forecast_to_csv(close_prices, y_future, N_FUTURE)
-    plot_predictions(df, int(len(close_prices) * DATA_RATIO), y_test_rescaled, y_pred_rescaled, y_future)
+    plot_predictions(df, y_test_rescaled, y_pred_rescaled, y_future)
 
 
 if __name__ == "__main__":
