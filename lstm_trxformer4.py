@@ -17,6 +17,7 @@ import logging
 
 # version lstm_trxformer4.py
 # just added  a plot for the last X days only.
+# test change in git
 
 # Global variables
 TICKER = 'AAPL'
