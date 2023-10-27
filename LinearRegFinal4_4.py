@@ -18,7 +18,7 @@ from tensorflow.python.keras.layers import LSTM, Dropout, Dense
 
 #Global variables area
 INPUT_DATA_FILE = 'input/AAPL_2013_2023_10_04.csv'
-SELECTED_TUNER = "Hyperband"  # Options: "RandomSearch", "Hyperband", "BayesianOptimization"
+SELECTED_TUNER = "RandomSearch"  # Options: "RandomSearch", "Hyperband", "BayesianOptimization"
 LOOK_BACK = 60
 N_FUTURE = 10
 SPLIT_RATIO = 0.8
@@ -85,11 +85,11 @@ def build_model(hp, input_shape):
 
 def get_tuner(name, input_shape):
     if name == "RandomSearch":
-        return RandomSearch(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=5, executions_per_trial=3, directory='project', overwrite=False, project_name='Stock Price LSTM')
+        return RandomSearch(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=5, executions_per_trial=3, directory='project/RandomSearch/', overwrite=False, project_name='StockPriceLSTM')
     elif name == "Hyperband":
-        return Hyperband(lambda hp: build_model(hp, input_shape), objective='val_loss', max_epochs=50, directory='project', overwrite=False,project_name='Stock Price LSTM 2')
+        return Hyperband(lambda hp: build_model(hp, input_shape), objective='val_loss', max_epochs=50, directory='project/Hyperband/', overwrite=False,project_name='StockPriceLSTM 2')
     elif name == "BayesianOptimization":
-        return BayesianOptimization(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=10, directory='project', overwrite=False, project_name='Stock Price LSTM')
+        return BayesianOptimization(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=10, directory='project/BayesianOptimization/', overwrite=False, project_name='StockPriceLSTM')
     else:
         raise ValueError(f"Unsupported tuner: {name}")
 
@@ -186,7 +186,7 @@ def evaluate_model(Y_test, y_pred):
 
 def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
-    history = model.fit(x_train_data, y_train_label, epochs=20, batch_size=64, validation_data=(x_val_data, y_val_label),
+    history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=64, validation_data=(x_val_data, y_val_label),
                         callbacks=[early_stop])
     return history
 
