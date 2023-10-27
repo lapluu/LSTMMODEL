@@ -22,9 +22,10 @@ logging.basicConfig(level=logging.INFO)
 
 # Global variables
 DATA_RATIO = 0.9
+INPUT_DATA_FILE = 'AAPL_2013_2023_10_04_v2.csv'
 #INPUT_DATA_FILE = 'AAPL_2013_2023_10_04.csv'
-#INPUT_DATA_FILE = 'BTC-CAD_2014_2023_10_06.csv'
-INPUT_DATA_FILE = 'AAPL_00_2023_10_12.csv'
+#INPUT_DATA_FILE = 'AAPL_2000_2023_10_04.csv'
+#INPUT_DATA_FILE = 'AAPL_00_2023_10_12.csv'
 INPUT_DATA_PATH = "input/"
 TIME_STEPS = 60
 N_FUTURE = 30
@@ -80,6 +81,7 @@ def create_data(data,look_back):
         Y.append(data[i, 0])
     X, Y = np.array(X), np.array(Y)
     X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+    Y = np.reshape(Y, (Y.shape[0], 1))
     return X, Y
 def generate_forecasts(n_future, X, Y, model, scaler):
     """
@@ -184,6 +186,7 @@ def build_model(input_shape):
                    return_sequences=LSTM_CONFIG["third_layer"]["return_sequences"]))
     model.add(Dropout(LSTM_CONFIG["dropout_values"][2]))
 
+    model.add(tf.keras.layers.BatchNormalization(synchronized=True))
     # Dense layer
     model.add(Dense(units=1))
 
@@ -196,7 +199,9 @@ def build_model(input_shape):
 def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
     # Used 20% of train data for validation
-    history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=64, validation_data=(x_val_data, y_val_label),
+    # history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=32, validation_data=(x_val_data, y_val_label),
+    #                     validation_split=0.2, callbacks=[early_stop])
+    history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=32,
                         validation_split=0.2, callbacks=[early_stop])
     return history
 
@@ -224,10 +229,10 @@ def save_evaluation_to_csv(mse, msle, mae, r2):
     evaluation_df.to_csv(OUTPUT_RESULTS_PATH+EVALUATION_ERROR_FILE, index=False)
     logging.info(f"Evaluation errors saved to {OUTPUT_RESULTS_PATH}{EVALUATION_ERROR_FILE}")
 
-def plot_predictions(df, Y_test, y_pred, y_future):
+def plot_predictions(df, Y_test, y_pred, y_future, n_future):
     # pick up the last date in the "Date" column as the start_day for futures
     last_date = df["Date"][-1:].iloc[-1]
-    future_dates = pd.date_range(last_date, periods=N_FUTURE + 1)[:-1]
+    future_dates = pd.date_range(last_date, periods=n_future + 1)[:-1]
 
     plt.figure(figsize=(10, 6))
     plt.style.use('fivethirtyeight')
@@ -241,6 +246,11 @@ def plot_predictions(df, Y_test, y_pred, y_future):
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
+    # Setting the filename as per the given rules
+    base_name = INPUT_DATA_FILE.split('.')[0]
+    file_name = f"{OUTPUT_RESULTS_PATH}{base_name}_graph_{n_future}.png"
+    # Saving the DataFrame to a CSV file
+    plt.savefig(file_name)
     plt.show()
 
 
@@ -296,7 +306,7 @@ def main():
 
     evaluate_model_errors(y_test_rescaled, y_pred_rescaled)
     save_forecast_to_csv(close_prices, y_future, N_FUTURE)
-    plot_predictions(df, y_test_rescaled, y_pred_rescaled, y_future)
+    plot_predictions(df, y_test_rescaled, y_pred_rescaled, y_future, N_FUTURE)
 
 
 if __name__ == "__main__":
