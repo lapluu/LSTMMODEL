@@ -206,10 +206,10 @@ def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
     return history
 
 def evaluate_model_errors(Y_test, y_pred):
-    mse = mean_squared_error(Y_test[0], y_pred)
-    msle = mean_squared_log_error(Y_test[0], y_pred)
-    mae = mean_absolute_error(Y_test[0], y_pred)
-    r2 = r2_score(Y_test[0], y_pred)
+    mse = mean_squared_error(Y_test, y_pred)
+    msle = mean_squared_log_error(Y_test, y_pred)
+    mae = mean_absolute_error(Y_test, y_pred)
+    r2 = r2_score(Y_test, y_pred)
 
     print('MSE: ', mse)
     print('MSLE: ', msle)
@@ -302,7 +302,7 @@ def main():
 
     y_pred_rescaled = scaler.inverse_transform(y_pred)
 
-    y_test_rescaled = scaler.inverse_transform([Y_test])
+    y_test_rescaled = scaler.inverse_transform(Y_test)
 
     evaluate_model_errors(y_test_rescaled, y_pred_rescaled)
     save_forecast_to_csv(close_prices, y_future, N_FUTURE)
