@@ -8,6 +8,8 @@ from sklearn.metrics import mean_squared_error, mean_squared_log_error, mean_abs
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
+import seaborn as sns
+sns.set_style('white', { 'axes.spines.right': False, 'axes.spines.top': False})
 
 # changes for this version 18 Sept 19,2023
 # Purpose: Try to put all the values into a structure so that
@@ -34,6 +36,7 @@ MODEL_FILE_BASE = "model_LSTM" + "AAPL-USD_"
 EVALUATION_ERROR_FILE = "evaluation_errors.csv"
 OUTPUT_RESULTS_PATH = "output/results/"
 OUTPUT_MODELS_PATH = "output/model/"
+TRAIN_EPOCHS = 60 # Number of epochs for training
 
 def get_latest_model_filename(base_filename):
     """
@@ -196,12 +199,12 @@ def build_model(input_shape):
 
     return model
 
-def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
+def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label,epochs):
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
     # Used 20% of train data for validation
     # history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=32, validation_data=(x_val_data, y_val_label),
     #                     validation_split=0.2, callbacks=[early_stop])
-    history = model.fit(x_train_data, y_train_label, epochs=50, batch_size=32,
+    history = model.fit(x_train_data, y_train_label, epochs=epochs, batch_size=32,
                         validation_split=0.2, callbacks=[early_stop])
     return history
 
@@ -273,6 +276,17 @@ def save_forecast_to_csv(close_prices_df, y_future, n_future):
     forecast_df.to_csv(file_name, index=False)
     logging.info(f"Forecasted data saved to {file_name}")
 
+def plot_Training_Validation_Loss(history, epochs):
+    # Plot training & validation loss values
+    fig, ax = plt.subplots(figsize=(10, 5), sharex=True)
+    sns.lineplot(data=history.history["loss"])
+    plt.title("Model loss")
+    plt.ylabel("Loss")
+    plt.xlabel("Epoch")
+    ax.xaxis.set_major_locator(plt.MaxNLocator(epochs))
+    plt.legend(["Train"], loc="upper left")
+    plt.grid()
+    plt.show()
 
 def main():
     df = load_data(INPUT_DATA_PATH + INPUT_DATA_FILE)
@@ -292,10 +306,11 @@ def main():
             return
     else:
         model = build_model((X_train.shape[1], 1))
-        history = train_model(model, X_train, Y_train, X_test, Y_test)
+        history = train_model(model, X_train, Y_train, X_test, Y_test, TRAIN_EPOCHS)
         print('History of the trained model:', history.history)
         logging.info(f"History of the trained model: {history.history } ")
         save_trained_model(model, MODEL_FILE_BASE)  # Save the model after training
+        plot_Training_Validation_Loss(history, TRAIN_EPOCHS)
 
     y_pred = model.predict(X_test)
     y_future = generate_forecasts(N_FUTURE, X_test, y_pred, model, scaler)
