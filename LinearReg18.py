@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator
 import logging
 import tensorflow as tf
 import os
@@ -8,6 +9,7 @@ from sklearn.metrics import mean_squared_error, mean_squared_log_error, mean_abs
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
+import yaml  # Import YAML at the beginning
 import seaborn as sns
 sns.set_style('white', { 'axes.spines.right': False, 'axes.spines.top': False})
 
@@ -37,6 +39,7 @@ EVALUATION_ERROR_FILE = "evaluation_errors.csv"
 OUTPUT_RESULTS_PATH = "output/results/"
 OUTPUT_MODELS_PATH = "output/model/"
 TRAIN_EPOCHS = 60 # Number of epochs for training
+MODEL_CONFIG_FILE = 'model.yml'
 
 def get_latest_model_filename(base_filename):
     """
@@ -153,41 +156,27 @@ def split_data(data, ratio, timesteps):
     logging.info(f"Training data size: {train_size} / {len(data)}")
     return train_size, train_data, test_data
 
-# Define hyperparameters in a dictionary
-LSTM_CONFIG = {
-    "first_layer": {
-        "units": 94,
-        "return_sequences": True
-    },
-    "second_layer": {
-        "units": 128,
-        "return_sequences": True
-    },
-    "third_layer": {
-        "units": 64,
-        "return_sequences": False
-    },
-    "dropout_values": [0.2, 0.1, 0.2]
-}
-
-def build_model(input_shape):
+def build_model(input_shape, config):
     model = tf.keras.models.Sequential()
 
     # First LSTM layer
-    model.add(LSTM(units=LSTM_CONFIG["first_layer"]["units"],
-                   return_sequences=LSTM_CONFIG["first_layer"]["return_sequences"],
+    model.add(LSTM(units=config["first_layer"]["units"],
+                   return_sequences=config["first_layer"]["return_sequences"],
                    input_shape=input_shape))
-    model.add(Dropout(LSTM_CONFIG["dropout_values"][0]))
+    if(config["dropout_values"][0]> 0.0):
+       model.add(Dropout(config["dropout_values"][0]))
 
     # Second LSTM layer
-    model.add(LSTM(units=LSTM_CONFIG["second_layer"]["units"],
-                   return_sequences=LSTM_CONFIG["second_layer"]["return_sequences"]))
-    model.add(Dropout(LSTM_CONFIG["dropout_values"][1]))
+    model.add(LSTM(units=config["second_layer"]["units"],
+                   return_sequences=config["second_layer"]["return_sequences"]))
+    if (config["dropout_values"][1] > 0.0):
+       model.add(Dropout(config["dropout_values"][1]))
 
     # Third LSTM layer
-    model.add(LSTM(units=LSTM_CONFIG["third_layer"]["units"],
-                   return_sequences=LSTM_CONFIG["third_layer"]["return_sequences"]))
-    model.add(Dropout(LSTM_CONFIG["dropout_values"][2]))
+    model.add(LSTM(units=config["third_layer"]["units"],
+                   return_sequences=config["third_layer"]["return_sequences"]))
+    if (config["dropout_values"][2] > 0.0):
+       model.add(Dropout(config["dropout_values"][2]))
 
     model.add(tf.keras.layers.BatchNormalization(synchronized=True))
     # Dense layer
@@ -278,17 +267,41 @@ def save_forecast_to_csv(close_prices_df, y_future, n_future):
 
 def plot_Training_Validation_Loss(history, epochs):
     # Plot training & validation loss values
-    fig, ax = plt.subplots(figsize=(10, 5), sharex=True)
+    fig, ax = plt.subplots(figsize=(10, 5))
     sns.lineplot(data=history.history["loss"])
     plt.title("Model loss")
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
-    ax.xaxis.set_major_locator(plt.MaxNLocator(epochs))
+    #ax.xaxis.set_major_locator(plt.MaxNLocator(epochs))
+    # Set ticks at every epoch
+    ax.xaxis.set_major_locator(FixedLocator(range(epochs + 1)))
     plt.legend(["Train"], loc="upper left")
     plt.grid()
     plt.show()
 
+# Add this function to read config from YAML file
+def read_config(config_path):
+    try:
+        with open(config_path, 'r') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError:
+        print(f"Error: The file '{config_path}' was not found.")
+        return None
+    except yaml.YAMLError as exc:
+        print(f"Error parsing YAML file: {exc}")
+        return None
+
 def main():
+    # Replace LSTM_CONFIG with read_config()
+    config = read_config(MODEL_CONFIG_FILE)
+    # Check if the configuration was successfully loaded
+    if config is None:
+        print("Configuration could not be loaded. Exiting the program.")
+        return  # or you can add other error handling logic here
+
+    # Your main program logic here
+    print("Configuration loaded. Continuing with the rest of the program...")
+
     df = load_data(INPUT_DATA_PATH + INPUT_DATA_FILE)
     close_prices, close_prices_scaled, scaler = preprocess_data(df)
     train_size, train_data, test_data = split_data(close_prices_scaled, DATA_RATIO, TIME_STEPS)
@@ -305,7 +318,7 @@ def main():
             logging.error("No pre-trained model found!")
             return
     else:
-        model = build_model((X_train.shape[1], 1))
+        model = build_model((X_train.shape[1], 1), config)
         history = train_model(model, X_train, Y_train, X_test, Y_test, TRAIN_EPOCHS)
         print('History of the trained model:', history.history)
         logging.info(f"History of the trained model: {history.history } ")

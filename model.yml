@@ -1,0 +1,13 @@
+first_layer:
+  units: 94
+  return_sequences: True
+second_layer:
+  units: 128
+  return_sequences: True
+third_layer:
+  units: 64
+  return_sequences: False
+dropout_values:
+  - 0.2
+  - 0.1
+  - 0.2
