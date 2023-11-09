@@ -178,7 +178,7 @@ def build_model(input_shape, config):
     if (config["dropout_values"][2] > 0.0):
        model.add(Dropout(config["dropout_values"][2]))
 
-    model.add(tf.keras.layers.BatchNormalization(synchronized=True))
+    #model.add(tf.keras.layers.BatchNormalization(synchronized=True))
     # Dense layer
     model.add(Dense(units=1))
 
