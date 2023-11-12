@@ -17,10 +17,10 @@ from tensorflow.python.keras.callbacks import EarlyStopping
 from tensorflow.python.keras.layers import LSTM, Dropout, Dense
 
 #Global variables area
-INPUT_DATA_FILE = 'input/AAPL_2013_2023_10_04.csv'
+INPUT_DATA_FILE = 'input/AAPL_1990_2023_10_25.csv'
 SELECTED_TUNER = "Hyperband"  # Options: "RandomSearch", "Hyperband", "BayesianOptimization"
 LOOK_BACK = 60
-N_FUTURE = 10
+N_FUTURE = 30
 SPLIT_RATIO = 0.8
 MODEL_FILE_BASE = "model_SRCH_LSTM"
 
@@ -65,15 +65,14 @@ def create_dataset(data, look_back=60):
 
 def build_model(hp, input_shape):
     model = tf.keras.models.Sequential()
-    model.add(LSTM(units=hp.Int('units_input', min_value=32, max_value=128, step=32),
+    model.add(LSTM(units=hp.Int('units_input', min_value=64, max_value=256, step=32),
                    return_sequences=True, input_shape=input_shape))
     model.add(Dropout(rate=hp.Float('dropout_1', min_value=0.0, max_value=0.5, step=0.1)))
-    model.add(LSTM(units=hp.Int('units_hidden', min_value=32, max_value=128, step=32), return_sequences=True))
+    model.add(LSTM(units=hp.Int('units_hidden', min_value=64, max_value=256, step=32), return_sequences=True))
     model.add(Dropout(rate=hp.Float('dropout_2', min_value=0.0, max_value=0.5, step=0.1)))
-    model.add(LSTM(units=hp.Int('units_output', min_value=32, max_value=128, step=32)))
+    model.add(LSTM(units=hp.Int('units_output', min_value=64, max_value=256, step=32)))
     model.add(Dropout(rate=hp.Float('dropout_3', min_value=0.0, max_value=0.5, step=0.1)))
-    model.add(Dense(units=hp.Int("units", min_value=32, max_value=128, step=32),
-                    activation="relu"))
+    model.add(Dense(units=1))
 
     # Tune the learning rate for the optimizer
     # Choose an optimal value from 0.01, 0.001, or 0.0001
@@ -85,11 +84,14 @@ def build_model(hp, input_shape):
 
 def get_tuner(name, input_shape):
     if name == "RandomSearch":
-        return RandomSearch(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=5, executions_per_trial=3, directory='project', overwrite=False, project_name='Stock Price LSTM')
+        return RandomSearch(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=5, executions_per_trial=3,
+                            directory='project/RandomSearch', overwrite=True, project_name='StockPriceLSTM')
     elif name == "Hyperband":
-        return Hyperband(lambda hp: build_model(hp, input_shape), objective='val_loss', max_epochs=50, directory='project', overwrite=False,project_name='Stock Price LSTM 2')
+        return Hyperband(lambda hp: build_model(hp, input_shape), objective='val_loss', max_epochs=50,
+                         directory='project/Hyperband', overwrite=False,project_name='StockPriceLSTM')
     elif name == "BayesianOptimization":
-        return BayesianOptimization(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=10, directory='project', overwrite=False, project_name='Stock Price LSTM')
+        return BayesianOptimization(lambda hp: build_model(hp, input_shape), objective='val_loss', max_trials=10,
+                                    directory='project/BayesianOpt', overwrite=False, project_name='StockPriceLSTM')
     else:
         raise ValueError(f"Unsupported tuner: {name}")
 
@@ -141,8 +143,9 @@ def plot_predictions(df, train_size,n_future, look_back, Y_test, y_pred,y_future
     future_dates = create_future_dates(last_date, n_future)
     plt.figure(figsize=(10, 6))
     plt.style.use('fivethirtyeight')
-    plt.plot(df["Date"][train_size + look_back:], Y_test.flatten(), label="Actual", linewidth=3, alpha=0.4)
-    plt.plot(df["Date"][train_size + look_back:], y_pred.flatten(), label="Predicted", linewidth=1.5, color='blue')
+    plot_len = len(Y_test.flatten()) # pick up enough 'Date" cells matched the len of Y_test array only. = len(Y_test.flatten())  # pick up enough 'Date" cells matched the len of Y_test array only.
+    plt.plot(df["Date"][-plot_len:], Y_test.flatten(), label="Actual", linewidth=3, alpha=0.4)
+    plt.plot(df["Date"][-plot_len:], y_pred.flatten(), label="Predicted", linewidth=1.5, color='blue')
     plt.plot(future_dates, y_future.flatten(), label="Future", linewidth=1.5, color='orange')
   #plt.plot(df["Date"][train_size + look_back:], y_future.flatten(), label="Future", linewidth=1.5, color='green')
 
@@ -186,7 +189,7 @@ def evaluate_model(Y_test, y_pred):
 
 def train_model(model, x_train_data, y_train_label, x_val_data, y_val_label):
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
-    history = model.fit(x_train_data, y_train_label, epochs=20, batch_size=64, validation_data=(x_val_data, y_val_label),
+    history = model.fit(x_train_data, y_train_label, epochs=60, batch_size=64, validation_data=(x_val_data, y_val_label),
                         callbacks=[early_stop])
     return history
 
@@ -228,14 +231,14 @@ def main():
     tuner.search_space_summary()
 
     early_stop = EarlyStopping(monitor="val_loss", patience=10)
-    tuner.search(X_train, Y_train, epochs=20, batch_size=32,
+    tuner.search(X_train, Y_train, epochs=60, batch_size=32,
                  validation_data=(X_test, Y_test), callbacks=[early_stop])
     tuner.search_space_summary(extended=False)
     # Retrieve and print the best two models.
     tuner_best_model = tuner.get_best_models(num_models=1)[0]
     print("Best model class:", tuner_best_model.__class__.__name__)
-    #tuner_best_model.build((X_train.shape[1], 1))
-    tuner_best_model.summary()
+    #tuner_best_model.build((None, X_train.shape[1], 1))
+    #tuner_best_model.summary()
     y_pred = tuner_best_model.predict(X_test)
     y_future_rescaled = generate_forecasts(N_FUTURE, X_test, y_pred, tuner_best_model, scaler)
 
